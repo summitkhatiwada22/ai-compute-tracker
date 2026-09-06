@@ -6,14 +6,21 @@ Pulls current GPU rental pricing from the Vast.ai marketplace (the
 "marketplace" tier of the tracker's two-tier GPU pricing series) and
 appends a dated snapshot to data/raw/vast_ai/.
 
-FIX (vs. earlier version): `limit` is now passed as an int, not a
-string. Vast.ai's SDK types `limit` as Optional[int]; passing a string
-silently produced far fewer results than requested (observed: 8 rows
-across 3 GPU models, when the real marketplace lists thousands across
-dozens of models). An earlier attempt at this fix also added a
-`disable_bundling` argument based on third-party docs — that parameter
-does not actually exist on the installed vastai package (confirmed via
-inspect.signature on the real installed version) and was removed.
+FIX #1: `limit` is passed as an int, not a string — Vast.ai's SDK types
+it as Optional[int], and passing a string silently returned far fewer
+results than requested. (An earlier attempt also added a
+`disable_bundling` argument based on third-party docs that turned out
+not to exist on the installed package — removed.)
+
+FIX #2 (this version): the per-model query built `gpu_name={model}`
+unquoted. Most GPU model names contain spaces ("RTX 4090", "Tesla T4",
+"GTX 1070 Ti"), which broke Vast.ai's query parser into nonsense
+sub-tokens and made every multi-word model silently fail — confirmed
+from live GitHub Actions logs showing "Unrecognized field" warnings for
+every spaced-out model name, while the only 3 models that ever
+succeeded (A10, A16, L4) happened to be the only single-word names in
+the entire discovered list. Fixed by quoting the value:
+gpu_name="{model}".
 
 GPU models tracked are NOT hardcoded — each run discovers every GPU
 model currently listed, then pulls pricing for each one found.
@@ -88,7 +95,7 @@ def discover_gpu_models(vast_client: VastAI) -> list[str]:
 
 def fetch_offers(vast_client: VastAI, gpu_model: str, limit: int = OFFERS_PER_MODEL):
     """Fetch current on-demand offers for a given GPU model, cheapest first."""
-    query = f"gpu_name={gpu_model} num_gpus=1 verified=true rentable=true"
+    query = f'gpu_name="{gpu_model}" num_gpus=1 verified=true rentable=true'
     try:
         raw_offers = vast_client.search_offers(
             query=query,
