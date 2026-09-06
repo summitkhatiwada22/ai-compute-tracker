@@ -68,11 +68,17 @@ PRICE_BUCKET_EDGES = [
     1, 1.5, 2, 3, 5, 8, 12, 20, 40,
 ]
 
-# Max results requested per price band. Each band should comfortably
-# stay under this — if a [diagnostic] line below reports a count close
-# to this number, that band is too wide and needs splitting further.
+# Max results requested per price band.
 BUCKET_QUERY_LIMIT = 2000
-CAP_WARNING_THRESHOLD = int(BUCKET_QUERY_LIMIT * 0.9)
+
+# The API has shown a hard ceiling of exactly 512 results on at least
+# one prior query, regardless of the limit requested — so the warning
+# below is anchored to that OBSERVED real ceiling, not to whatever
+# number we happen to request. Warning at 90% of the observed cap, not
+# 90% of BUCKET_QUERY_LIMIT — a threshold based on the requested value
+# would likely never fire even if a band were already silently capped.
+OBSERVED_API_CAP = 512
+CAP_WARNING_THRESHOLD = int(OBSERVED_API_CAP * 0.9)
 
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data" / "raw" / "vast_ai"
 
@@ -87,6 +93,16 @@ def _as_list(offers):
         return offers
     print(f"[warn] unexpected response type from search_offers: {type(offers)}", file=sys.stderr)
     return []
+
+
+def _mb_to_gb(value_mb):
+    """Vast.ai returns gpu_ram and cpu_ram in MB (confirmed: a Quadro
+    P2000's real 5GB VRAM came back as 5120 in the raw field — 5120 MB
+    = 5GB exactly). Convert here so the CSV column genuinely holds GB,
+    matching its name, instead of just relabeling MB values as GB."""
+    if value_mb is None:
+        return None
+    return round(value_mb / 1024, 2)
 
 
 def fetch_all_offers(vast_client: VastAI) -> list[dict]:
@@ -160,10 +176,10 @@ def main():
             "gpu_model": offer.get("gpu_name"),
             "price_usd_per_hr": offer.get("dph_total"),
             "num_gpus": offer.get("num_gpus"),
-            "gpu_ram_gb": offer.get("gpu_ram"),
+            "gpu_ram_gb": _mb_to_gb(offer.get("gpu_ram")),
             "dlperf": offer.get("dlperf"),
             "dlperf_per_dollar": offer.get("dlperf_per_dphtotal"),
-            "cpu_ram_gb": offer.get("cpu_ram"),
+            "cpu_ram_gb": _mb_to_gb(offer.get("cpu_ram")),
             "disk_space_gb": offer.get("disk_space"),
             "region": offer.get("geolocation"),
             "reliability": offer.get("reliability2"),
