@@ -7,12 +7,13 @@ Pulls current GPU rental pricing from the Vast.ai marketplace (the
 appends a dated snapshot to data/raw/vast_ai/.
 
 FIX (vs. earlier version): `limit` is now passed as an int, not a
-string. Vast.ai's official SDK reference types `limit` as Optional[int];
-passing a string silently produced far fewer results than requested
-(observed: 8 rows across 3 GPU models, when the real marketplace lists
-thousands across dozens of models). Also disabling offer bundling, since
-we want a pricing census across individual listings, not a rental
-shortlist collapsed down to one row per identical-machine group.
+string. Vast.ai's SDK types `limit` as Optional[int]; passing a string
+silently produced far fewer results than requested (observed: 8 rows
+across 3 GPU models, when the real marketplace lists thousands across
+dozens of models). An earlier attempt at this fix also added a
+`disable_bundling` argument based on third-party docs — that parameter
+does not actually exist on the installed vastai package (confirmed via
+inspect.signature on the real installed version) and was removed.
 
 GPU models tracked are NOT hardcoded — each run discovers every GPU
 model currently listed, then pulls pricing for each one found.
@@ -65,7 +66,6 @@ def discover_gpu_models(vast_client: VastAI) -> list[str]:
             type="on-demand",
             order="dph_total",
             limit=DISCOVERY_SAMPLE_SIZE,  # int, not str — see module docstring
-            disable_bundling=True,
         )
     except Exception as exc:  # noqa: BLE001
         sys.exit(f"Discovery query failed — check API key/connectivity: {exc}")
@@ -95,7 +95,6 @@ def fetch_offers(vast_client: VastAI, gpu_model: str, limit: int = OFFERS_PER_MO
             type="on-demand",
             order="dph_total",
             limit=limit,  # int, not str
-            disable_bundling=True,
         )
     except Exception as exc:  # noqa: BLE001 - log and continue with other models
         print(f"[warn] search failed for {gpu_model}: {exc}", file=sys.stderr)
