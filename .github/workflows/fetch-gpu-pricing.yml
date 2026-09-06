@@ -1,0 +1,40 @@
+name: Fetch GPU Pricing (Vast.ai)
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run fetch script
+        env:
+          VAST_API_KEY: ${{ secrets.VAST_API_KEY }}
+        run: python scripts/fetch_gpu_pricing.py
+
+      - name: Rebuild the database from all raw data collected so far
+        run: python scripts/build_database.py
+
+      - name: Commit and push new data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/raw/vast_ai/ data/tracker.duckdb
+          git diff --cached --quiet || git commit -m "Daily Vast.ai GPU pricing snapshot $(date -u +%F)"
+          git push
