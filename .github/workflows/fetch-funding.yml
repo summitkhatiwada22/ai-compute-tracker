@@ -1,0 +1,45 @@
+name: Fetch Funding Data (Dealroom)
+
+on:
+  schedule:
+    # Daily — same reasoning as the Lambda Cloud fetch: the API call is
+    # free and cheap, so there's no real cost to checking daily even
+    # though the underlying number may often be unchanged from the day
+    # before. The payoff is pinpointing the exact day a new deal gets
+    # logged into Dealroom's database, rather than only knowing it
+    # happened sometime in a three-month window. 10:15 UTC — offset
+    # from the other three daily jobs (06:00, 06:05, 09:00 UTC).
+    - cron: "15 10 * * *"
+  workflow_dispatch: {} # lets you trigger a run manually to test
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run fetch script
+        run: python scripts/fetch_funding.py
+
+      - name: Rebuild the database from all raw data collected so far
+        run: python scripts/build_database.py
+
+      - name: Commit and push new data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/raw/funding/ data/tracker.duckdb
+          git diff --cached --quiet || git commit -m "Funding snapshot update $(date -u +%F)"
+          git push
