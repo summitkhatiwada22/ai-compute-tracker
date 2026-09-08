@@ -1,0 +1,54 @@
+name: Fetch Capex & Financials (SEC EDGAR)
+
+on:
+  schedule:
+    # Daily — same reasoning as the Lambda Cloud fetch: the API calls
+    # are cheap and static, and the script is idempotent (only appends
+    # genuinely new disclosures), so there's no real cost to checking
+    # daily even though real filings only land a few times a year per
+    # company. Daily means a new filing gets caught within a day of
+    # landing, not up to a month later. 09:00 UTC — offset from the
+    # other two jobs (06:00 and 06:05 UTC).
+    - cron: "0 9 * * *"
+  workflow_dispatch: {} # lets you trigger a run manually from the Actions tab
+
+permissions:
+  contents: write # needed so the workflow can commit new rows back to the repo
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    env:
+      # SEC requires a descriptive User-Agent (name + email) identifying
+      # the requester, per their fair-access policy. This is NOT a
+      # secret or credential — it's just an identifying string SEC asks
+      # for, so it's fine as a plain visible value here rather than a
+      # GitHub secret. EDIT THE EMAIL BELOW to your own before relying
+      # on this — a placeholder or someone else's address risks SEC
+      # rate-limiting or blocking requests under this identity.
+      SEC_USER_AGENT: "Summit Khatiwada summitkhatiwada22@gmail.com"
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run fetch script
+        run: python scripts/fetch_capex.py
+
+      - name: Rebuild the database from all raw data collected so far
+        run: python scripts/build_database.py
+
+      - name: Commit and push new data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/raw/capex/ data/tracker.duckdb
+          git diff --cached --quiet || git commit -m "Capex & financials update $(date -u +%F)"
+          git push
