@@ -2,11 +2,14 @@ name: Fetch GPU Pricing (Lambda Cloud)
 
 on:
   schedule:
-    # Weekly, not daily — neocloud rate cards move far less often than
-    # a live marketplace. Mondays at 07:00 UTC — deliberately offset by
-    # an hour from the daily Vast.ai workflow (also 06:00 UTC), so the
-    # two never race to commit/push at the same moment on Mondays.
-    - cron: "0 7 * * 1"
+    # Daily, 5 minutes after the Vast.ai marketplace fetch (06:00 UTC).
+    # Even though neocloud rate cards change far less often than a live
+    # marketplace, daily still pins down the exact day a price actually
+    # moved — the API call is cheap, so there's no real cost to running
+    # it daily instead of weekly. The 5-minute offset (not a full hour)
+    # keeps both fetches close together in time while still avoiding
+    # any risk of the two workflows' commits colliding on the same push.
+    - cron: "5 6 * * *"
   workflow_dispatch: {} # lets you trigger a run manually from the Actions tab
 
 permissions:
@@ -40,5 +43,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/raw/lambda_labs/ data/tracker.duckdb
-          git diff --cached --quiet || git commit -m "Weekly Lambda Cloud GPU pricing snapshot $(date -u +%F)"
+          git diff --cached --quiet || git commit -m "Daily Lambda Cloud GPU pricing snapshot $(date -u +%F)"
           git push
