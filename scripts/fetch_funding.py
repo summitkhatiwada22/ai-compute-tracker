@@ -63,10 +63,20 @@ FIELDNAMES = [
 
 
 def fetch_ai_market_snapshot() -> dict | None:
-    """Query Dealroom's free API for the AI sector market map."""
+    """Query Dealroom's free API for the AI sector market map.
+
+    FIX: an earlier version searched by keyword (q=ai), which matched a
+    niche curated list ("1.5k+ AI Agents", 1,596 companies) rather than
+    the broader AI sector — confirmed live, not a crash, just the wrong
+    scope. Dealroom's own response included 'availableTags' showing
+    'AI' as an exact filterable tag, so this version filters by tag
+    instead of fuzzy keyword search, then picks the result with the
+    MOST companies among matches — the broadest available map, not
+    whichever one keyword-search ranked first.
+    """
     try:
         search_resp = requests.get(
-            DEALROOM_MARKETMAPS_URL, params={"q": "AI", "limit": 5},
+            DEALROOM_MARKETMAPS_URL, params={"tag": "AI", "limit": 20},
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
     except requests.RequestException as exc:
@@ -78,16 +88,21 @@ def fetch_ai_market_snapshot() -> dict | None:
         return None
 
     search_data = search_resp.json()
-    print(f"[diagnostic] Dealroom marketmaps search returned: {search_data}")
+    print(f"[diagnostic] Dealroom marketmaps search returned {len(search_data.get('results', []))} results "
+          f"for tag=AI")
 
     results = search_data.get("results", [])
     if not results:
-        print("[warn] No AI market map found in Dealroom search results", file=sys.stderr)
+        print("[warn] No AI-tagged market maps found — check the tag filter still matches", file=sys.stderr)
         return None
 
-    top_map = results[0]
+    # Pick the broadest map (most companies), not just the first result.
+    top_map = max(results, key=lambda r: r.get("companyCount", 0) or 0)
+    print(f"[diagnostic] Candidates considered: "
+          f"{[(r.get('title'), r.get('companyCount')) for r in results]}")
     map_id = top_map.get("id")
-    print(f"Using market map: {top_map.get('title')} (id={map_id})")
+    print(f"Using broadest AI market map: {top_map.get('title')} "
+          f"({top_map.get('companyCount')} companies, id={map_id})")
 
     try:
         detail_resp = requests.get(
