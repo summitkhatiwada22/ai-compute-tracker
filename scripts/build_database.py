@@ -60,25 +60,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()    for table_name, csv_glob in SOURCES.items():
-        matching_files = list(csv_glob.parent.glob(csv_glob.name))
-        if not matching_files:
-            print(f"[skip] no files yet for {table_name} ({csv_glob})")
-            continue
-
-        con.execute(f"DROP TABLE IF EXISTS {table_name}")
-        con.execute(
-            f"""
-            CREATE TABLE {table_name} AS
-            SELECT * FROM read_csv_auto('{csv_glob}', union_by_name=true)
-            """
-        )
-        count = con.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-        print(f"[ok] {table_name}: {count} rows from {len(matching_files)} file(s)")
-
-    con.close()
-    print(f"Database rebuilt at {DB_PATH}")
-
-
-if __name__ == "__main__":
     main()
