@@ -36,6 +36,18 @@ unverified API, a fuzzy company-name-matching problem, and a whole
 extra failure mode — real complexity for a series that Dealroom alone
 already answers cleanly. Cut deliberately, not by oversight.
 
+ACCESS NOTE: two live runs showed every 404 came from custom-slug map
+IDs ("terrestrial-ai-compute", "market-intelligence-landscape",
+"us-novel-ai-startups"...) — the shape of partner-built maps — while
+every numeric "landscape-XXXXX" map worked. This version therefore
+(1) follows each map's own documented `companiesUrl` before falling
+back to a constructed URL, and (2) falls back to the documented
+/api/third-party-maps catalogue for partner-built maps, logging their
+company_count even when a funding sample isn't exposed. Rows carry an
+`access_path` column (marketmap / companiesUrl / third_party_maps) so
+you can always see which route produced a number — and rows reached
+via third_party_maps have NO funding sample, only a company count.
+
 METHODOLOGY NOTE for any future methodology page: this reflects
 Dealroom's own private research and sector categorization, not an
 independently verifiable government figure. `total_companies` per tag
@@ -68,6 +80,7 @@ FALLBACK_TAGS = ["AI", "Data Centers", "Semiconductors", "Cloud", "Deep Tech"]
 
 DEALROOM_MARKETMAPS_URL = "https://dealroom.co/api/marketmaps"
 DEALROOM_MARKETMAP_URL = "https://dealroom.co/api/marketmap"
+DEALROOM_THIRD_PARTY_MAPS_URL = "https://dealroom.co/api/third-party-maps"
 REQUEST_TIMEOUT_SECONDS = 30
 
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data" / "raw" / "funding"
@@ -76,8 +89,95 @@ SNAPSHOT_PATH = OUTPUT_DIR / "ai_market_snapshot.csv"
 FIELDNAMES = [
     "collected_at", "source", "tag", "market_map_id", "market_map_title",
     "total_companies", "sample_funding_usd", "sample_size", "is_capped",
-    "segment_count",
+    "segment_count", "access_path", "source_label",
 ]
+
+# Cached once per run — the documented /api/third-party-maps catalogue of
+# partner-built maps, keyed by slug and by lowercase title.
+_THIRD_PARTY_MAPS: dict | None = None
+
+
+def load_third_party_maps() -> dict:
+    """Fetch Dealroom's documented /api/third-party-maps catalogue once.
+
+    Returns {slug_or_lowercase_title: record}. Records carry
+    company_count, public_url, source_label — enough to log
+    total_companies for partner-built maps that the standard
+    /api/marketmap detail endpoint refuses to serve (the custom-slug
+    maps that 404'd in live runs: "Terrestrial compute: the AI
+    build-out", "Market Intelligence Landscape", "US Novel AI
+    Startups", etc.)."""
+    global _THIRD_PARTY_MAPS
+    if _THIRD_PARTY_MAPS is not None:
+        return _THIRD_PARTY_MAPS
+
+    _THIRD_PARTY_MAPS = {}
+    try:
+        resp = requests.get(DEALROOM_THIRD_PARTY_MAPS_URL, timeout=REQUEST_TIMEOUT_SECONDS)
+    except requests.RequestException as exc:
+        print(f"[warn] third-party-maps fetch failed: {exc}", file=sys.stderr)
+        return _THIRD_PARTY_MAPS
+
+    if resp.status_code != 200:
+        print(f"[warn] third-party-maps HTTP {resp.status_code}", file=sys.stderr)
+        return _THIRD_PARTY_MAPS
+
+    data = resp.json()
+    records = data.get("results", []) if isinstance(data, dict) else data
+    for rec in records or []:
+        slug = rec.get("slug")
+        title = (rec.get("title") or "").strip().lower()
+        if slug:
+            _THIRD_PARTY_MAPS[slug] = rec
+        if title:
+            _THIRD_PARTY_MAPS[title] = rec
+    print(f"[diagnostic] third-party-maps catalogue: {len(records or [])} partner-built map(s) — "
+          f"{[(r.get('slug'), r.get('title'), r.get('company_count')) for r in (records or [])][:40]}")
+    return _THIRD_PARTY_MAPS
+
+
+def _parse_detail(payload) -> dict | None:
+    """Tolerate the two plausible shapes a companies endpoint can return:
+    a dict with a companies[] list (the documented /api/marketmap shape),
+    or a bare list of companies."""
+    if isinstance(payload, dict):
+        companies = payload.get("companies")
+        if companies is None and isinstance(payload.get("results"), list):
+            companies = payload["results"]
+        return {
+            "companies": companies or [],
+            "total_companies": payload.get("total_companies") or payload.get("totalCompanies")
+                                or payload.get("company_count") or payload.get("companyCount"),
+            "segments": payload.get("segments") or [],
+            "returned": payload.get("returned"),
+            "capped": payload.get("capped"),
+            "note": payload.get("note"),
+        }
+    if isinstance(payload, list):
+        return {"companies": payload, "total_companies": None, "segments": [],
+                "returned": len(payload), "capped": None, "note": None}
+    return None
+
+
+def _detail_urls_for(candidate: dict) -> list[str]:
+    """The API's own companiesUrl first (documented field on every search
+    result), then our constructed /api/marketmap?id= as a fallback.
+    Deduplicated, order preserved."""
+    urls = []
+    own = candidate.get("companiesUrl") or candidate.get("companies_url")
+    if own:
+        if own.startswith("/"):
+            own = "https://dealroom.co" + own
+        urls.append(own)
+    map_id = candidate.get("id")
+    if map_id:
+        urls.append(f"{DEALROOM_MARKETMAP_URL}?id={map_id}")
+    seen, out = set(), []
+    for u in urls:
+        if u not in seen:
+            seen.add(u)
+            out.append(u)
+    return out
 
 
 def discover_available_tags() -> list[str]:
@@ -109,16 +209,18 @@ def fetch_market_snapshot_for_tag(tag: str) -> dict | None:
     """Query Dealroom's free API for the broadest ACCESSIBLE market map
     under one tag.
 
-    FIX: confirmed live that every 404 correlates with a custom-slug map
-    ID (e.g. "terrestrial-ai-compute", "market-intelligence-landscape")
-    rather than the numeric "landscape-XXXXX" format — Dealroom's public
-    marketmap detail endpoint appears to only serve the numeric-ID maps,
-    even though custom-slug ones appear in search results. An earlier
-    version always picked the single broadest candidate and gave up if
-    it 404'd. This version tries candidates in descending order by
-    company count and falls back to the next one on a 404, recovering
-    any tag where a working alternative exists — only reports "no
-    snapshot" if every candidate for that tag fails.
+    Access strategy, in order, per candidate (broadest first):
+      1. The candidate's own `companiesUrl` (a documented field on every
+         search result) — the API's link, not one we construct.
+      2. Our constructed /api/marketmap?id= (works for numeric
+         "landscape-XXXXX" maps).
+      3. If both fail and the map is a custom-slug/partner-built one,
+         look it up in the documented /api/third-party-maps catalogue
+         and log its company_count (funding sample unavailable there).
+    Confirmed live that every prior 404 was a custom-slug map
+    ("terrestrial-ai-compute", "market-intelligence-landscape",
+    "us-novel-ai-startups"...) — the shape of partner-built maps, which
+    is exactly what /api/third-party-maps exists to serve.
     """
     try:
         search_resp = requests.get(
@@ -134,64 +236,84 @@ def fetch_market_snapshot_for_tag(tag: str) -> dict | None:
               file=sys.stderr)
         return None
 
-    search_data = search_resp.json()
-    results = search_data.get("results", [])
+    results = search_resp.json().get("results", [])
     print(f"[diagnostic] tag={tag}: {len(results)} candidate map(s) — "
           f"{[(r.get('title'), r.get('companyCount')) for r in results]}")
-
     if not results:
         print(f"[warn] No market maps found for tag={tag}", file=sys.stderr)
         return None
 
-    # Try candidates broadest-first, falling back on a 404 instead of
-    # giving up after the single top pick.
     ranked = sorted(results, key=lambda r: r.get("companyCount", 0) or 0, reverse=True)
 
+    # Pass 1 + 2: try each candidate's companiesUrl, then constructed URL.
     for candidate in ranked:
         map_id = candidate.get("id")
-        try:
-            detail_resp = requests.get(
-                DEALROOM_MARKETMAP_URL, params={"id": map_id},
-                timeout=REQUEST_TIMEOUT_SECONDS,
-            )
-        except requests.RequestException as exc:
-            print(f"[warn] Dealroom marketmap detail fetch failed for tag={tag}, id={map_id}: {exc}",
-                  file=sys.stderr)
-            continue
+        for url in _detail_urls_for(candidate):
+            try:
+                detail_resp = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
+            except requests.RequestException as exc:
+                print(f"[warn] detail fetch error tag={tag} url={url}: {exc}", file=sys.stderr)
+                continue
+            if detail_resp.status_code != 200:
+                print(f"[diagnostic]   {url} -> HTTP {detail_resp.status_code}", file=sys.stderr)
+                continue
+            try:
+                parsed = _parse_detail(detail_resp.json())
+            except ValueError:
+                print(f"[diagnostic]   {url} -> non-JSON response", file=sys.stderr)
+                continue
+            if not parsed:
+                continue
 
-        if detail_resp.status_code == 404:
-            print(f"[diagnostic]   {map_id} ('{candidate.get('title')}') 404'd — trying next candidate", file=sys.stderr)
-            continue
-        if detail_resp.status_code != 200:
-            print(f"[warn] Dealroom detail HTTP {detail_resp.status_code} for tag={tag}, id={map_id}", file=sys.stderr)
-            continue
+            companies = parsed["companies"]
+            sample_funding = sum(
+                (c.get("totalFunding") or {}).get("amount", 0) or 0
+                for c in companies if isinstance(c, dict)
+            ) or None
+            print(f"  tag={tag}: using '{candidate.get('title')}' via {url}")
+            print(f"[diagnostic]   returned={parsed['returned']}, capped={parsed['capped']}, "
+                  f"note={parsed['note']}")
+            return {
+                "tag": tag,
+                "market_map_id": map_id,
+                "market_map_title": candidate.get("title"),
+                "total_companies": parsed["total_companies"] or candidate.get("companyCount"),
+                "segment_count": len(parsed["segments"]),
+                "sample_funding_usd": sample_funding,
+                "sample_size": len(companies),
+                "is_capped": parsed["capped"],
+                "access_path": "companiesUrl" if url == _detail_urls_for(candidate)[0] and (candidate.get("companiesUrl") or candidate.get("companies_url")) else "marketmap",
+                "source_label": candidate.get("source"),
+            }
 
-        # Found a working candidate.
-        print(f"  tag={tag}: using '{candidate.get('title')}' "
-              f"({candidate.get('companyCount')} companies, id={map_id})")
-        detail = detail_resp.json()
-        print(f"[diagnostic]   returned={detail.get('returned')}, capped={detail.get('capped')}, "
-              f"note={detail.get('note')}")
+    # Pass 3: partner-built maps via the documented third-party catalogue.
+    catalogue = load_third_party_maps()
+    for candidate in ranked:
+        map_id = candidate.get("id") or ""
+        title = (candidate.get("title") or "").strip().lower()
+        rec = catalogue.get(map_id) or catalogue.get(title)
+        if rec:
+            count = rec.get("company_count") or rec.get("companyCount") or candidate.get("companyCount")
+            print(f"  tag={tag}: '{candidate.get('title')}' found in third-party-maps "
+                  f"(company_count={count}, source={rec.get('source_label')}) — count only, no funding sample")
+            return {
+                "tag": tag,
+                "market_map_id": map_id,
+                "market_map_title": candidate.get("title"),
+                "total_companies": count,
+                "segment_count": rec.get("category_count"),
+                "sample_funding_usd": None,
+                "sample_size": 0,
+                "is_capped": None,
+                "access_path": "third_party_maps",
+                "source_label": rec.get("source_label"),
+            }
 
-        companies = detail.get("companies", [])
-        sample_funding = sum(
-            (c.get("totalFunding") or {}).get("amount", 0) or 0
-            for c in companies
-        ) or None
-
-        return {
-            "tag": tag,
-            "market_map_id": map_id,
-            "market_map_title": candidate.get("title"),
-            "total_companies": detail.get("total_companies"),
-            "segment_count": len(detail.get("segments", [])),
-            "sample_funding_usd": sample_funding,
-            "sample_size": len(companies),
-            "is_capped": detail.get("capped"),
-        }
-
-    print(f"[warn] tag={tag}: every candidate map failed (likely all custom-slug, "
-          f"not accessible via the public detail endpoint) — no snapshot this run", file=sys.stderr)
+    # Everything failed — dump the raw records so the next fix is made
+    # from real URLs, not hypotheses.
+    print(f"[warn] tag={tag}: every candidate failed on every access path. Raw candidates:", file=sys.stderr)
+    for candidate in ranked:
+        print(f"[raw]   {candidate}", file=sys.stderr)
     return None
 
 
