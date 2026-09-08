@@ -63,7 +63,10 @@ above possible.
 
     python scripts/fetch_funding.py
 
-Writes to ONE persistent, append-only log, one row per tag per run:
+Writes to ONE persistent log, ONE ROW PER MAP per day (a map chosen by
+several tag queries appears once, with all of them in selected_for_tags;
+Dealroom's own tag list for the map is in dealroom_tags). Re-running on
+the same UTC day replaces that day's rows instead of duplicating them:
     data/raw/funding/ai_market_snapshot.csv
 """
 
@@ -87,7 +90,8 @@ OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data" / "raw" / "funding"
 SNAPSHOT_PATH = OUTPUT_DIR / "ai_market_snapshot.csv"
 
 FIELDNAMES = [
-    "collected_at", "source", "tag", "market_map_id", "market_map_title",
+    "collected_at", "source", "market_map_id", "market_map_title",
+    "selected_for_tags", "dealroom_tags",
     "total_companies", "sample_funding_usd", "sample_size", "is_capped",
     "segment_count", "access_path", "source_label",
 ]
@@ -284,6 +288,7 @@ def fetch_market_snapshot_for_tag(tag: str) -> dict | None:
                 "is_capped": parsed["capped"],
                 "access_path": "companiesUrl" if url == _detail_urls_for(candidate)[0] and (candidate.get("companiesUrl") or candidate.get("companies_url")) else "marketmap",
                 "source_label": candidate.get("source"),
+                "dealroom_tags": candidate.get("tags") or [],
             }
 
     # Pass 3: partner-built maps via the documented third-party catalogue.
@@ -307,6 +312,7 @@ def fetch_market_snapshot_for_tag(tag: str) -> dict | None:
                 "is_capped": None,
                 "access_path": "third_party_maps",
                 "source_label": rec.get("source_label"),
+                "dealroom_tags": candidate.get("tags") or rec.get("tags") or [],
             }
 
     # Everything failed — dump the raw records so the next fix is made
@@ -317,33 +323,88 @@ def fetch_market_snapshot_for_tag(tag: str) -> dict | None:
     return None
 
 
+def _write_rows_idempotent(rows: list[dict], today: str) -> None:
+    """Write today's rows so that (a) re-running on the same UTC day
+    REPLACES that day's rows instead of stacking duplicates — the same
+    idempotency the GPU pricing pipelines have — and (b) if the existing
+    file's header doesn't match FIELDNAMES (schema changed between
+    versions), the old file is rotated to a .bak rather than corrupted
+    by appending mismatched rows under a stale header. Nothing is ever
+    deleted."""
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    existing: list[dict] = []
+    if SNAPSHOT_PATH.exists():
+        with open(SNAPSHOT_PATH, newline="") as f:
+            reader = csv.DictReader(f)
+            if reader.fieldnames != FIELDNAMES:
+                backup = SNAPSHOT_PATH.with_name(
+                    f"{SNAPSHOT_PATH.stem}.schema-v-old.{today}.bak.csv")
+                SNAPSHOT_PATH.rename(backup)
+                print(f"[diagnostic] header mismatch — rotated old file to {backup.name} (kept, not deleted)")
+            else:
+                existing = [r for r in reader if not (r.get("collected_at") or "").startswith(today)]
+                dropped = sum(1 for _ in open(SNAPSHOT_PATH)) - 1 - len(existing)
+                if dropped > 0:
+                    print(f"[diagnostic] replacing {dropped} existing row(s) from {today} with this run's")
+
+    with open(SNAPSHOT_PATH, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
+        writer.writeheader()
+        writer.writerows(existing)
+        writer.writerows(rows)
+
+
 def main():
     now = datetime.now(timezone.utc)
-    rows = []
+    today = now.strftime("%Y-%m-%d")
 
     tags = discover_available_tags()
     print(f"Tracking {len(tags)} tag(s) this run: {tags}")
 
+    # One row per MAP, not per tag: several tag queries can select the
+    # same map ("1.5k+ AI Agents" under both AI and Global). Merge them.
+    by_map: dict[str, dict] = {}
     for tag in tags:
         print(f"\nFetching Dealroom snapshot for tag={tag}...")
-        snapshot = fetch_market_snapshot_for_tag(tag)
-        if snapshot:
-            rows.append({"collected_at": now.isoformat(), "source": "dealroom", **snapshot})
-        else:
+        snap = fetch_market_snapshot_for_tag(tag)
+        if not snap:
             print(f"  No snapshot logged for tag={tag} this run — see warnings above.")
+            continue
+        key = snap["market_map_id"]
+        if key in by_map:
+            by_map[key]["_selected_for"].add(tag)
+        else:
+            snap["_selected_for"] = {tag}
+            by_map[key] = snap
 
-    if not rows:
+    if not by_map:
         sys.exit("No snapshots could be built for any tag this run — see warnings above.")
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    file_exists = SNAPSHOT_PATH.exists()
-    with open(SNAPSHOT_PATH, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
-        if not file_exists:
-            writer.writeheader()
-        writer.writerows(rows)
+    rows = []
+    for snap in by_map.values():
+        dr_tags = snap.get("dealroom_tags") or []
+        if isinstance(dr_tags, str):
+            dr_tags = [dr_tags]
+        rows.append({
+            "collected_at": now.isoformat(),
+            "source": "dealroom",
+            "market_map_id": snap["market_map_id"],
+            "market_map_title": snap["market_map_title"],
+            "selected_for_tags": ";".join(sorted(snap["_selected_for"])),
+            "dealroom_tags": ";".join(sorted(str(t) for t in dr_tags)),
+            "total_companies": snap["total_companies"],
+            "sample_funding_usd": snap["sample_funding_usd"],
+            "sample_size": snap["sample_size"],
+            "is_capped": snap["is_capped"],
+            "segment_count": snap["segment_count"],
+            "access_path": snap["access_path"],
+            "source_label": snap["source_label"],
+        })
+    rows.sort(key=lambda r: r["market_map_title"] or "")
 
-    print(f"\nLogged {len(rows)} tag snapshot(s) to {SNAPSHOT_PATH}")
+    _write_rows_idempotent(rows, today)
+    print(f"\nLogged {len(rows)} unique map(s) covering {sum(len(s['_selected_for']) for s in by_map.values())} "
+          f"tag selection(s) to {SNAPSHOT_PATH}")
 
 
 if __name__ == "__main__":
