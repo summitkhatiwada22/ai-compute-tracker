@@ -106,7 +106,20 @@ def discover_available_tags() -> list[str]:
 
 
 def fetch_market_snapshot_for_tag(tag: str) -> dict | None:
-    """Query Dealroom's free API for the broadest market map under one tag."""
+    """Query Dealroom's free API for the broadest ACCESSIBLE market map
+    under one tag.
+
+    FIX: confirmed live that every 404 correlates with a custom-slug map
+    ID (e.g. "terrestrial-ai-compute", "market-intelligence-landscape")
+    rather than the numeric "landscape-XXXXX" format — Dealroom's public
+    marketmap detail endpoint appears to only serve the numeric-ID maps,
+    even though custom-slug ones appear in search results. An earlier
+    version always picked the single broadest candidate and gave up if
+    it 404'd. This version tries candidates in descending order by
+    company count and falls back to the next one on a 404, recovering
+    any tag where a working alternative exists — only reports "no
+    snapshot" if every candidate for that tag fails.
+    """
     try:
         search_resp = requests.get(
             DEALROOM_MARKETMAPS_URL, params={"tag": tag, "limit": 20},
@@ -130,44 +143,56 @@ def fetch_market_snapshot_for_tag(tag: str) -> dict | None:
         print(f"[warn] No market maps found for tag={tag}", file=sys.stderr)
         return None
 
-    top_map = max(results, key=lambda r: r.get("companyCount", 0) or 0)
-    map_id = top_map.get("id")
-    print(f"  tag={tag}: using broadest map '{top_map.get('title')}' "
-          f"({top_map.get('companyCount')} companies, id={map_id})")
+    # Try candidates broadest-first, falling back on a 404 instead of
+    # giving up after the single top pick.
+    ranked = sorted(results, key=lambda r: r.get("companyCount", 0) or 0, reverse=True)
 
-    try:
-        detail_resp = requests.get(
-            DEALROOM_MARKETMAP_URL, params={"id": map_id},
-            timeout=REQUEST_TIMEOUT_SECONDS,
-        )
-    except requests.RequestException as exc:
-        print(f"[warn] Dealroom marketmap detail fetch failed for tag={tag}: {exc}", file=sys.stderr)
-        return None
+    for candidate in ranked:
+        map_id = candidate.get("id")
+        try:
+            detail_resp = requests.get(
+                DEALROOM_MARKETMAP_URL, params={"id": map_id},
+                timeout=REQUEST_TIMEOUT_SECONDS,
+            )
+        except requests.RequestException as exc:
+            print(f"[warn] Dealroom marketmap detail fetch failed for tag={tag}, id={map_id}: {exc}",
+                  file=sys.stderr)
+            continue
 
-    if detail_resp.status_code != 200:
-        print(f"[warn] Dealroom detail HTTP {detail_resp.status_code} for tag={tag}", file=sys.stderr)
-        return None
+        if detail_resp.status_code == 404:
+            print(f"[diagnostic]   {map_id} ('{candidate.get('title')}') 404'd — trying next candidate", file=sys.stderr)
+            continue
+        if detail_resp.status_code != 200:
+            print(f"[warn] Dealroom detail HTTP {detail_resp.status_code} for tag={tag}, id={map_id}", file=sys.stderr)
+            continue
 
-    detail = detail_resp.json()
-    print(f"[diagnostic]   returned={detail.get('returned')}, capped={detail.get('capped')}, "
-          f"note={detail.get('note')}")
+        # Found a working candidate.
+        print(f"  tag={tag}: using '{candidate.get('title')}' "
+              f"({candidate.get('companyCount')} companies, id={map_id})")
+        detail = detail_resp.json()
+        print(f"[diagnostic]   returned={detail.get('returned')}, capped={detail.get('capped')}, "
+              f"note={detail.get('note')}")
 
-    companies = detail.get("companies", [])
-    sample_funding = sum(
-        (c.get("totalFunding") or {}).get("amount", 0) or 0
-        for c in companies
-    ) or None
+        companies = detail.get("companies", [])
+        sample_funding = sum(
+            (c.get("totalFunding") or {}).get("amount", 0) or 0
+            for c in companies
+        ) or None
 
-    return {
-        "tag": tag,
-        "market_map_id": map_id,
-        "market_map_title": top_map.get("title"),
-        "total_companies": detail.get("total_companies"),
-        "segment_count": len(detail.get("segments", [])),
-        "sample_funding_usd": sample_funding,
-        "sample_size": len(companies),
-        "is_capped": detail.get("capped"),
-    }
+        return {
+            "tag": tag,
+            "market_map_id": map_id,
+            "market_map_title": candidate.get("title"),
+            "total_companies": detail.get("total_companies"),
+            "segment_count": len(detail.get("segments", [])),
+            "sample_funding_usd": sample_funding,
+            "sample_size": len(companies),
+            "is_capped": detail.get("capped"),
+        }
+
+    print(f"[warn] tag={tag}: every candidate map failed (likely all custom-slug, "
+          f"not accessible via the public detail endpoint) — no snapshot this run", file=sys.stderr)
+    return None
 
 
 def main():
