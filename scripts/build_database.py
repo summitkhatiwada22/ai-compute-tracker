@@ -39,7 +39,7 @@ SOURCES = {
     # cash flow), even though the underlying script is still called
     # fetch_capex.py.
     "hyperscaler_financials": RAW_DIR / "capex" / "capex_financials_log.csv",
-    "ai_market_snapshot": RAW_DIR / "funding" / "ai_market_snapshot.csv",
+    "ai_market_snapshot": RAW_DIR / "funding" / "*.csv",
 }
 
 
