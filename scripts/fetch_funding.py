@@ -63,11 +63,14 @@ above possible.
 
     python scripts/fetch_funding.py
 
-Writes to ONE persistent log, ONE ROW PER MAP per day (a map chosen by
-several tag queries appears once, with all of them in selected_for_tags;
-Dealroom's own tag list for the map is in dealroom_tags). Re-running on
-the same UTC day replaces that day's rows instead of duplicating them:
-    data/raw/funding/ai_market_snapshot.csv
+Writes ONE FILE PER DAY (data/raw/funding/YYYY-MM-DD.csv) — same
+pattern as the Vast.ai and Lambda pricing pipelines, switched to from
+an earlier single-persistent-file design for consistency. ONE ROW PER
+MAP per day (a map chosen by several tag queries appears once, with
+all of them in selected_for_tags; Dealroom's own tag list for the map
+is in dealroom_tags). Re-running on the same day overwrites that day's
+file cleanly; every past day's file is untouched:
+    data/raw/funding/YYYY-MM-DD.csv
 """
 
 import csv
@@ -87,7 +90,14 @@ DEALROOM_THIRD_PARTY_MAPS_URL = "https://dealroom.co/api/third-party-maps"
 REQUEST_TIMEOUT_SECONDS = 30
 
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data" / "raw" / "funding"
-SNAPSHOT_PATH = OUTPUT_DIR / "ai_market_snapshot.csv"
+
+
+def snapshot_path_for(day: str) -> Path:
+    """One file per day, e.g. data/raw/funding/2026-09-08.csv — same
+    pattern as the Vast.ai and Lambda pricing pipelines. Re-running on
+    the same day overwrites that day's file cleanly; every past day's
+    file is untouched, same guarantee as the other pipelines."""
+    return OUTPUT_DIR / f"{day}.csv"
 
 FIELDNAMES = [
     "collected_at", "source", "market_map_id", "market_map_title",
@@ -323,37 +333,6 @@ def fetch_market_snapshot_for_tag(tag: str) -> dict | None:
     return None
 
 
-def _write_rows_idempotent(rows: list[dict], today: str) -> None:
-    """Write today's rows so that (a) re-running on the same UTC day
-    REPLACES that day's rows instead of stacking duplicates — the same
-    idempotency the GPU pricing pipelines have — and (b) if the existing
-    file's header doesn't match FIELDNAMES (schema changed between
-    versions), the old file is rotated to a .bak rather than corrupted
-    by appending mismatched rows under a stale header. Nothing is ever
-    deleted."""
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    existing: list[dict] = []
-    if SNAPSHOT_PATH.exists():
-        with open(SNAPSHOT_PATH, newline="") as f:
-            reader = csv.DictReader(f)
-            if reader.fieldnames != FIELDNAMES:
-                backup = SNAPSHOT_PATH.with_name(
-                    f"{SNAPSHOT_PATH.stem}.schema-v-old.{today}.bak.csv")
-                SNAPSHOT_PATH.rename(backup)
-                print(f"[diagnostic] header mismatch — rotated old file to {backup.name} (kept, not deleted)")
-            else:
-                existing = [r for r in reader if not (r.get("collected_at") or "").startswith(today)]
-                dropped = sum(1 for _ in open(SNAPSHOT_PATH)) - 1 - len(existing)
-                if dropped > 0:
-                    print(f"[diagnostic] replacing {dropped} existing row(s) from {today} with this run's")
-
-    with open(SNAPSHOT_PATH, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
-        writer.writeheader()
-        writer.writerows(existing)
-        writer.writerows(rows)
-
-
 def main():
     now = datetime.now(timezone.utc)
     today = now.strftime("%Y-%m-%d")
@@ -402,9 +381,15 @@ def main():
         })
     rows.sort(key=lambda r: r["market_map_title"] or "")
 
-    _write_rows_idempotent(rows, today)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = snapshot_path_for(today)
+    with open(out_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
+        writer.writeheader()
+        writer.writerows(rows)
+
     print(f"\nLogged {len(rows)} unique map(s) covering {sum(len(s['_selected_for']) for s in by_map.values())} "
-          f"tag selection(s) to {SNAPSHOT_PATH}")
+          f"tag selection(s) to {out_path}")
 
 
 if __name__ == "__main__":
