@@ -1,0 +1,25 @@
+collected_at,provider,tier,instance_type_name,gpu_model,num_gpus,price_usd_per_hr,description,vcpus,memory_gib,storage_gib,regions_with_capacity,num_regions_with_capacity
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_1x_gh200,gh200,1,2.29,1x GH200 (96 GB),64,432,4096,,0
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_8x_b200_sxm6,b200_sxm6,8,53.52,8x B200 (180 GB SXM6),208,2900,22528,,0
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_2x_b200_sxm6,b200_sxm6,2,13.78,2x B200 (180 GB SXM6),52,720,5632,,0
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_1x_b200_sxm6,b200_sxm6,1,6.99,1x B200 (180 GB SXM6),26,360,2816,,0
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_8x_h100_sxm5,h100_sxm5,8,31.92,8x H100 (80 GB SXM5),208,1800,22528,,0
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_4x_h100_sxm5,h100_sxm5,4,16.36,4x H100 (80 GB SXM5),104,900,11264,,0
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_2x_h100_sxm5,h100_sxm5,2,8.38,2x H100 (80 GB SXM5),52,450,5632,us-south-2;us-southeast-1,2
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_1x_h100_sxm5,h100_sxm5,1,4.29,1x H100 (80 GB SXM5),26,225,2816,us-southeast-1,1
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_1x_h100_pcie,h100_pcie,1,3.29,1x H100 (80 GB PCIe),26,200,1024,us-west-3,1
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_8x_a100_80gb_sxm4,a100_80gb_sxm4,8,22.32,8x A100 (80 GB SXM4),240,1800,20480,us-midwest-1,1
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_1x_a10,a10,1,1.29,1x A10 (24 GB PCIe),30,200,1400,us-east-1;us-west-1,2
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_1x_rtx6000,rtx6000,1,0.69,1x RTX 6000 (24 GB),14,46,512,,0
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_1x_a100,a100,1,1.99,1x A100 (40 GB PCIe),30,200,512,,0
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_1x_a100_sxm4,a100_sxm4,1,1.99,1x A100 (40 GB SXM4),30,200,512,asia-south-1;us-east-1;us-west-2,3
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_2x_a100,a100,2,3.98,2x A100 (40 GB PCIe),60,400,1024,,0
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_4x_a100,a100,4,7.96,4x A100 (40 GB PCIe),120,800,1024,,0
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_8x_a100,a100,8,15.92,8x A100 (40 GB SXM4),124,1800,6144,,0
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_1x_a6000,a6000,1,1.09,1x A6000 (48 GB),14,100,200,,0
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_2x_a6000,a6000,2,2.18,2x A6000 (48 GB),28,200,1024,,0
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_4x_a6000,a6000,4,4.36,4x A6000 (48 GB),56,400,1024,us-south-2,1
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_8x_v100,v100,8,6.32,8x Tesla V100 (16 GB),92,448,6041,,0
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,gpu_8x_v100_n,v100_n,8,6.32,8x Tesla V100 (16 GB),88,448,6041,,0
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,cpu_4x_general,cpu_4x_general,,0.2,4x CPU General (16 GiB),4,16,100,,0
+2026-09-08T11:14:02.147229+00:00,lambda_labs,neocloud,cpu_4x_generalx,cpu_4x_generalx,,0.2,4x CPU General Gen0 (16 GiB),4,16,96,,0
