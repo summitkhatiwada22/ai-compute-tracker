@@ -21,6 +21,7 @@ A public data tracker for the economics of the AI infrastructure buildout — pa
 - Cash-flow figures in quarterly filings are sometimes cumulative year-to-date rather than a single discrete quarter — each row's exact period is preserved rather than assumed, so this is recoverable at analysis time.
 - GPU marketplace and neocloud prices are not directly comparable to undisclosed hyperscaler-negotiated bulk pricing — see above.
 - The funding series is single-sourced (Dealroom only) by deliberate choice, to keep the pipeline simple and free. A SEC Form D cross-reference was considered and explicitly parked as a documented future fast-follow, not abandoned — see git history on `fetch_funding.py` for the reasoning.
+- `total_companies` in the funding series is Dealroom's own reported count and can be trusted directly. `sample_funding_usd` is NOT a true sector total — Dealroom's public API only returns a capped sample of companies per list (`sample_size` shows exactly how many), so this figure is a partial, directional lower bound, not the real aggregate funding of the sector.
 
 ## Data pipeline
 
