@@ -52,3 +52,30 @@ collected_at,source,tag,market_map_id,market_map_title,total_companies,sample_fu
 2026-09-08T16:11:23.989641+00:00,dealroom,UK,landscape-39773,UK Techbio landscape,86,3523489543,50,True,7
 2026-09-08T16:11:23.989641+00:00,dealroom,USA,landscape-47823,NYC AI Map by Lux Capital,219,92011389764,153,True,27
 2026-09-08T16:11:23.989641+00:00,dealroom,World,landscape-49226,Global EV Battery Startups by Segment,458,36199334065,223,True,35
+2026-09-08T16:20:26.697913+00:00,dealroom,AI,landscape-53885,1.5k+ AI Agents,1596,20011677222,501,True,51,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Africa,landscape-42436,African climate tech investors,21,11320000,20,True,3,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Biotech,landscape-56130,1k+ Global Genetics & Genomics startups,1234,3271880736,96,True,8,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Climate,landscape-52820,AI x climate tech,746,2123779398,103,True,9,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Consumer,landscape-15346,Global Consumer Mental Health companies,485,7904870808,148,True,15,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Crypto,landscape-12256,Non-Fungible Token (NFT) startups,384,25162658201,182,True,30,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Deep Tech,landscape-53012,600+ global advanced materials startups,645,6665844067,156,True,13,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Defence,landscape-50938,"Defence, Security and Resilience startups in Europe",350,5990712804,72,True,6,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Energy,landscape-54168,600+ Global Grid technology & infrastructure startups,677,12086517352,205,True,18,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Europe,landscape-44107,TechBio x Drug discovery (Europe & Israel),677,3121760832,150,True,13,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Fintech,landscape-47614,Nature fintech,435,2738574847,216,True,18,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Food & Agri,landscape-12883,Alternative protein,922,6717008757,90,True,8,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,France,landscape-48531,"Startups for the Paris olympic games (sports, event, media tech)",17,34796593,12,True,1,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Gaming,landscape-45416,AI x gaming startups,134,255333201051,112,True,17,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Global,landscape-53885,1.5k+ AI Agents,1596,20011677222,501,True,51,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,HR,landscape-50945,Human resources software,258,24250991294,154,True,15,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Health,landscape-57962,Rare Disease Therapeutics & Technologies Landscape,1239,1968758526,120,True,10,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Marketing,landscape-51287,Creator Economy companies,379,12681097406,206,True,22,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Mobility,landscape-49226,Global EV Battery Startups by Segment,458,36199334065,223,True,35,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Nordics,landscape-48259,Nordics Defence startups,155,2180468046,132,True,19,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Real Estate,landscape-33371,Building energy efficiency startups,414,5956211195,113,True,11,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Robotics,landscape-48993,European Industrial Robotics startups,280,2191443198,113,True,11,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Space,landscape-20033,Space Tech Landscape,192,30086275199,149,True,24,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,Switzerland,landscape-54048,Top Swiss Deep Tech startups,294,7184030983,120,True,10,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,UK,landscape-39773,UK Techbio landscape,86,3523489543,50,True,7,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,USA,landscape-47823,NYC AI Map by Lux Capital,219,92011389764,153,True,27,companiesUrl,dealroom
+2026-09-08T16:20:26.697913+00:00,dealroom,World,landscape-49226,Global EV Battery Startups by Segment,458,36199334065,223,True,35,companiesUrl,dealroom
