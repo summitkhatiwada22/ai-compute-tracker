@@ -1,0 +1,44 @@
+name: Fetch GPU Pricing (Lambda Cloud)
+
+on:
+  schedule:
+    # Weekly, not daily — neocloud rate cards move far less often than
+    # a live marketplace. Mondays at 07:00 UTC — deliberately offset by
+    # an hour from the daily Vast.ai workflow (also 06:00 UTC), so the
+    # two never race to commit/push at the same moment on Mondays.
+    - cron: "0 7 * * 1"
+  workflow_dispatch: {} # lets you trigger a run manually from the Actions tab
+
+permissions:
+  contents: write # needed so the workflow can commit the new CSV back to the repo
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run fetch script
+        env:
+          LAMBDA_API_KEY: ${{ secrets.LAMBDA_API_KEY }}
+        run: python scripts/fetch_lambda_pricing.py
+
+      - name: Rebuild the database from all raw data collected so far
+        run: python scripts/build_database.py
+
+      - name: Commit and push new data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/raw/lambda_labs/ data/tracker.duckdb
+          git diff --cached --quiet || git commit -m "Weekly Lambda Cloud GPU pricing snapshot $(date -u +%F)"
+          git push
