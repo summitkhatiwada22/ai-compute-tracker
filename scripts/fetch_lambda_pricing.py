@@ -39,9 +39,17 @@ UNIT NOTE: price_cents_per_hour is CENTS, not dollars — divided by 100
 below. Checking this explicitly rather than assuming, after the
 Vast.ai gpu_ram MB-vs-GB mislabeling earlier.
 
-Neocloud rate cards change far less often than a live marketplace, so
-this is designed to run WEEKLY (see the matching GitHub Actions
-workflow), not daily like the Vast.ai fetch.
+SCOPE NOTE: Lambda's endpoint returns every instance type they sell,
+including CPU-only SKUs (e.g. "cpu_4x_general") — out of scope for a
+GPU pricing tracker. These are filtered out explicitly below rather
+than falling through with blank gpu_model/num_gpus fields, which is
+what an earlier version of this script did.
+
+Runs DAILY, same cadence as the Vast.ai marketplace fetch — even though
+neocloud rate cards change far less often, a daily pull is what lets
+the tracker pin down the exact day a price actually moved, not just
+"sometime this week." The API call is cheap and static, so there's no
+real cost to running it daily instead of weekly.
 
     export LAMBDA_API_KEY="your-key-here"
     python scripts/fetch_lambda_pricing.py
@@ -134,15 +142,28 @@ def main():
 
     print("Fetching Lambda Cloud instance types...")
     instance_map = fetch_instance_types(api_key)
-    print(f"[diagnostic] received {len(instance_map)} instance types")
+    print(f"[diagnostic] received {len(instance_map)} instance types (all types, including non-GPU)")
 
     if not instance_map:
         sys.exit("Zero instance types returned — check API key/connectivity before trusting this run.")
 
-    example_key = next(iter(instance_map))
-    print(f"[diagnostic] example raw entry ({example_key}): {instance_map[example_key]}")
+    # Lambda's endpoint returns everything they sell, including CPU-only
+    # SKUs (e.g. "cpu_4x_general") — out of scope for a GPU pricing
+    # tracker, and previously fell through with blank gpu_model/num_gpus
+    # fields rather than being excluded outright. Filter to GPU instance
+    # types only, based on Lambda's own naming convention.
+    gpu_instance_map = {name: entry for name, entry in instance_map.items() if name.startswith("gpu_")}
+    skipped = sorted(set(instance_map) - set(gpu_instance_map))
+    if skipped:
+        print(f"[diagnostic] excluding {len(skipped)} non-GPU instance type(s): {', '.join(skipped)}")
 
-    rows = [build_row(name, entry, run_ts) for name, entry in instance_map.items()]
+    if not gpu_instance_map:
+        sys.exit("Zero GPU instance types after filtering — check API key/connectivity before trusting this run.")
+
+    example_key = next(iter(gpu_instance_map))
+    print(f"[diagnostic] example raw entry ({example_key}): {gpu_instance_map[example_key]}")
+
+    rows = [build_row(name, entry, run_ts) for name, entry in gpu_instance_map.items()]
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_path = OUTPUT_DIR / f"{run_date}.csv"
