@@ -42,20 +42,28 @@ def gpu_pricing_overall(con):
     verify are the same hardware (checked against Lambda's own published
     instance catalog).
 
-    A few Lambda SKUs are deliberately left unmapped (fall through to NULL
-    and get excluded) rather than guessed, because there's no confident
-    1:1 match on the Vast.ai side:
-      - "gh200"   — Grace Hopper Superchip; Vast.ai doesn't list this at all
-      - "a100"    — bare, no memory/form-factor spec; Vast splits A100 into
-                    "A100 PCIE" vs "A100 SXM4" with no unspecified bucket
-      - "rtx6000" — ambiguous; Vast has three distinct RTX 6000-family
-                    entries ("RTX 6000Ada", "RTX 6000D", "RTX A6000") that
-                    are different chips/generations
-      - "v100_n"  — variant with no clearly corresponding distinct entry
-                    on Vast.ai's side
+    Two Lambda SKUs are deliberately left unmapped (fall through to NULL
+    and get excluded), for two different reasons:
+      - "gh200"   — Grace Hopper Superchip; Vast.ai doesn't sell this
+                    hardware at all, so there's no counterpart to map to.
+      - "v100_n"  — couldn't confirm what this actually is from Lambda's
+                    public docs or API. Check scripts/fetch_lambda_pricing.py
+                    to see how it's derived before guessing at a mapping.
 
-    If Lambda's catalog changes or you can confirm what these actually are,
-    add them to the CASE mapping below rather than guessing here.
+    Everything else maps to a confirmed hardware match, cross-checked
+    against Lambda's published instance descriptions (docs.lambda.ai):
+      - "rtx6000" -> Lambda describes this as 24 GB VRAM, which is the
+        older Quadro RTX 6000, not the 48 GB RTX 6000 Ada. Vast.ai lists
+        that card separately as "Q RTX 6000" (distinct from its
+        "RTX 6000Ada", "RTX 6000D", and "RTX PRO 6000 *" entries, which
+        are different, newer cards) -> mapped to "Q RTX 6000".
+      - "a100" (bare) -> Lambda's A100 PCIe is documented as 40 GB; the
+        SXM4 variants already have their own explicit slugs
+        ("a100_sxm4", "a100_80gb_sxm4"), so by elimination the bare slug
+        is the original PCIe 40 GB offering -> mapped to "A100 PCIE".
+
+    If Lambda's catalog changes, or you can confirm what "v100_n" is,
+    add it to the CASE mapping below rather than guessing here.
     """
     return _rows(con, """
         WITH marketplace AS (
@@ -75,6 +83,8 @@ def gpu_pricing_overall(con):
                     WHEN 'v100' THEN 'Tesla V100'
                     WHEN 'a100_sxm4' THEN 'A100 SXM4'
                     WHEN 'a100_80gb_sxm4' THEN 'A100 SXM4'
+                    WHEN 'a100' THEN 'A100 PCIE'
+                    WHEN 'rtx6000' THEN 'Q RTX 6000'
                     ELSE NULL
                 END AS gpu_model,
                 price_usd_per_hr
@@ -103,7 +113,6 @@ def gpu_pricing_overall(con):
         GROUP BY 1, 2
         ORDER BY 1, 2
     """)
-
 
 def gpu_pricing_by_model(con):
     """One row per (date, tier, gpu_model) — for anyone who wants to
