@@ -87,7 +87,8 @@ def funding_latest(con):
     not full daily history of a series that barely moves day to day."""
     return _rows(con, """
         SELECT market_map_title, selected_for_tags, total_companies,
-               sample_funding_usd, sample_size, is_capped, collected_at
+               sample_funding_usd, sample_size, is_capped,
+               CAST(collected_at AS VARCHAR) AS collected_at
         FROM ai_market_snapshot
         WHERE collected_at = (SELECT MAX(collected_at) FROM ai_market_snapshot)
         ORDER BY total_companies DESC
