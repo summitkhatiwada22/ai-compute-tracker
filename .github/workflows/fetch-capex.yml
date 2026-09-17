@@ -45,10 +45,13 @@ jobs:
       - name: Rebuild the database from all raw data collected so far
         run: python scripts/build_database.py
 
+      - name: Rebuild public summary JSON for the website
+        run: python scripts/build_public_summary.py
+
       - name: Commit and push new data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/raw/capex/ data/tracker.duckdb
+          git add data/raw/capex/ data/tracker.duckdb data/public/
           git diff --cached --quiet || git commit -m "Capex & financials update $(date -u +%F)"
           git push
