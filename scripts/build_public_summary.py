@@ -32,38 +32,43 @@ def _rows(con, query):
 
 
 def gpu_pricing_overall(con):
-    """One row per (date, tier): median $/hr, restricted to GPU models that
-    are genuinely the same hardware across both tiers.
+    """One row per (date, tier): median $/hr per GPU, restricted to GPU
+    models that are genuinely the same hardware across both tiers.
 
-    Vast.ai (marketplace) and Lambda Cloud (neocloud) name the same chips
-    completely differently — e.g. Vast writes "H100 SXM", Lambda writes
-    "h100_sxm5". An exact-string join between the two never matches, so
-    this maps Lambda's slugs onto Vast's display names for pairs we can
-    verify are the same hardware (checked against Lambda's own published
-    instance catalog).
+    Two separate problems had to be fixed to get here:
 
-    Two Lambda SKUs are deliberately left unmapped (fall through to NULL
-    and get excluded), for two different reasons:
-      - "gh200"   — Grace Hopper Superchip; Vast.ai doesn't sell this
-                    hardware at all, so there's no counterpart to map to.
-      - "v100_n"  — couldn't confirm what this actually is from Lambda's
-                    public docs or API. Check scripts/fetch_lambda_pricing.py
-                    to see how it's derived before guessing at a mapping.
+    1. Naming mismatch. Vast.ai (marketplace) and Lambda Cloud (neocloud)
+       name the same chips completely differently — e.g. Vast writes
+       "H100 SXM", Lambda writes "h100_sxm5". An exact-string join between
+       the two never matches, so this maps Lambda's slugs onto Vast's
+       display names for pairs confirmed to be the same hardware (checked
+       against Lambda's own published instance descriptions):
+         - "rtx6000" -> Lambda documents this as 24 GB VRAM, i.e. the
+           older Quadro RTX 6000, not the 48 GB RTX 6000 Ada. Vast.ai
+           lists that exact card separately as "Q RTX 6000".
+         - "a100" (bare) -> Lambda's A100 PCIe is documented as 40 GB;
+           the SXM4 variants already have their own explicit slugs
+           ("a100_sxm4", "a100_80gb_sxm4"), so by elimination the bare
+           slug is the PCIe 40 GB offering -> "A100 PCIE".
+       Only "gh200" (Grace Hopper Superchip) stays unmapped — Vast.ai
+       doesn't sell that hardware at all, so there's no counterpart.
 
-    Everything else maps to a confirmed hardware match, cross-checked
-    against Lambda's published instance descriptions (docs.lambda.ai):
-      - "rtx6000" -> Lambda describes this as 24 GB VRAM, which is the
-        older Quadro RTX 6000, not the 48 GB RTX 6000 Ada. Vast.ai lists
-        that card separately as "Q RTX 6000" (distinct from its
-        "RTX 6000Ada", "RTX 6000D", and "RTX PRO 6000 *" entries, which
-        are different, newer cards) -> mapped to "Q RTX 6000".
-      - "a100" (bare) -> Lambda's A100 PCIe is documented as 40 GB; the
-        SXM4 variants already have their own explicit slugs
-        ("a100_sxm4", "a100_80gb_sxm4"), so by elimination the bare slug
-        is the original PCIe 40 GB offering -> mapped to "A100 PCIE".
-
-    If Lambda's catalog changes, or you can confirm what "v100_n" is,
-    add it to the CASE mapping below rather than guessing here.
+    2. Per-GPU vs. per-node price. Lambda's API field is named
+       price_cents_per_hour but is actually the TOTAL price for the whole
+       instance, not per GPU — confirmed directly from raw fetch data:
+       gpu_8x_v100 costs $6.32/hr total for 8 GPUs ($0.79/GPU, matching
+       Lambda's own published per-GPU rate exactly), not $6.32/GPU.
+       gpu_1x_a6000 / gpu_2x_a6000 / gpu_4x_a6000 are $1.09 / $2.18 / $4.36
+       — clean linear scaling by GPU count, confirming the field is a
+       node total. Vast.ai's marketplace listings are always single-GPU
+       (num_gpus = 1), so comparing Lambda's raw field directly against
+       them compared "whole node" prices against "one GPU" prices. Fixed
+       by dividing Lambda's price by its own num_gpus column before
+       anything else touches it. This also explains why "v100" and
+       "v100_n" looked like a duplicate bug earlier (both $6.32) — they're
+       two distinct real Lambda SKUs (plain vs. NVLink-interconnected V100
+       pods) that happen to cost the same per GPU; dividing reveals that
+       rather than hiding it.
     """
     return _rows(con, """
         WITH marketplace AS (
@@ -81,14 +86,16 @@ def gpu_pricing_overall(con):
                     WHEN 'h100_sxm5' THEN 'H100 SXM'
                     WHEN 'b200_sxm6' THEN 'B200'
                     WHEN 'v100' THEN 'Tesla V100'
+                    WHEN 'v100_n' THEN 'Tesla V100'
                     WHEN 'a100_sxm4' THEN 'A100 SXM4'
                     WHEN 'a100_80gb_sxm4' THEN 'A100 SXM4'
                     WHEN 'a100' THEN 'A100 PCIE'
                     WHEN 'rtx6000' THEN 'Q RTX 6000'
                     ELSE NULL
                 END AS gpu_model,
-                price_usd_per_hr
+                price_usd_per_hr / num_gpus AS price_usd_per_hr
             FROM gpu_pricing_neocloud_lambda
+            WHERE num_gpus > 0
         ),
         per_tier AS (
             SELECT collected_at, tier, gpu_model, price_usd_per_hr FROM marketplace
