@@ -32,20 +32,59 @@ def _rows(con, query):
 
 
 def gpu_pricing_overall(con):
-    """One row per (date, tier): median $/hr, restricted to GPU models
-    that appear in BOTH tiers that day. Vast.ai's marketplace spans
-    everything from cheap consumer cards to rare high-end listings,
-    while Lambda's neocloud catalog is a narrower set of professional
-    cards only — an unrestricted median across each tier's full catalog
-    compares two different hardware populations, not the same GPU
-    priced two ways, and can produce a misleading ordering as a
-    result. Restricting to the model intersection each day makes this
-    a genuine like-for-like comparison."""
+    """One row per (date, tier): median $/hr, restricted to GPU models that
+    are genuinely the same hardware across both tiers.
+
+    Vast.ai (marketplace) and Lambda Cloud (neocloud) name the same chips
+    completely differently — e.g. Vast writes "H100 SXM", Lambda writes
+    "h100_sxm5". An exact-string join between the two never matches, so
+    this maps Lambda's slugs onto Vast's display names for pairs we can
+    verify are the same hardware (checked against Lambda's own published
+    instance catalog).
+
+    A few Lambda SKUs are deliberately left unmapped (fall through to NULL
+    and get excluded) rather than guessed, because there's no confident
+    1:1 match on the Vast.ai side:
+      - "gh200"   — Grace Hopper Superchip; Vast.ai doesn't list this at all
+      - "a100"    — bare, no memory/form-factor spec; Vast splits A100 into
+                    "A100 PCIE" vs "A100 SXM4" with no unspecified bucket
+      - "rtx6000" — ambiguous; Vast has three distinct RTX 6000-family
+                    entries ("RTX 6000Ada", "RTX 6000D", "RTX A6000") that
+                    are different chips/generations
+      - "v100_n"  — variant with no clearly corresponding distinct entry
+                    on Vast.ai's side
+
+    If Lambda's catalog changes or you can confirm what these actually are,
+    add them to the CASE mapping below rather than guessing here.
+    """
     return _rows(con, """
-        WITH per_tier AS (
-            SELECT collected_at, tier, gpu_model, price_usd_per_hr FROM gpu_pricing_marketplace
+        WITH marketplace AS (
+            SELECT collected_at, tier, gpu_model, price_usd_per_hr
+            FROM gpu_pricing_marketplace
+        ),
+        neocloud_mapped AS (
+            SELECT
+                collected_at,
+                tier,
+                CASE gpu_model
+                    WHEN 'a10' THEN 'A10'
+                    WHEN 'a6000' THEN 'RTX A6000'
+                    WHEN 'h100_pcie' THEN 'H100 PCIE'
+                    WHEN 'h100_sxm5' THEN 'H100 SXM'
+                    WHEN 'b200_sxm6' THEN 'B200'
+                    WHEN 'v100' THEN 'Tesla V100'
+                    WHEN 'a100_sxm4' THEN 'A100 SXM4'
+                    WHEN 'a100_80gb_sxm4' THEN 'A100 SXM4'
+                    ELSE NULL
+                END AS gpu_model,
+                price_usd_per_hr
+            FROM gpu_pricing_neocloud_lambda
+        ),
+        per_tier AS (
+            SELECT collected_at, tier, gpu_model, price_usd_per_hr FROM marketplace
             UNION ALL
-            SELECT collected_at, tier, gpu_model, price_usd_per_hr FROM gpu_pricing_neocloud_lambda
+            SELECT collected_at, tier, gpu_model, price_usd_per_hr FROM neocloud_mapped
+            WHERE gpu_model IS NOT NULL
         ),
         common_models AS (
             SELECT CAST(collected_at AS DATE) AS date, gpu_model
