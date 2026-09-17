@@ -32,20 +32,35 @@ def _rows(con, query):
 
 
 def gpu_pricing_overall(con):
-    """One row per (date, tier): a single market-wide median $/hr across
-    all GPU models — this is what actually renders as the headline
-    marketplace-vs-neocloud comparison chart."""
+    """One row per (date, tier): median $/hr, restricted to GPU models
+    that appear in BOTH tiers that day. Vast.ai's marketplace spans
+    everything from cheap consumer cards to rare high-end listings,
+    while Lambda's neocloud catalog is a narrower set of professional
+    cards only — an unrestricted median across each tier's full catalog
+    compares two different hardware populations, not the same GPU
+    priced two ways, and can produce a misleading ordering as a
+    result. Restricting to the model intersection each day makes this
+    a genuine like-for-like comparison."""
     return _rows(con, """
-        SELECT
-            CAST(collected_at AS DATE) AS date,
-            tier,
-            COUNT(*) AS num_listings,
-            ROUND(MEDIAN(price_usd_per_hr), 4) AS median_price_usd_per_hr
-        FROM (
-            SELECT collected_at, tier, price_usd_per_hr FROM gpu_pricing_marketplace
+        WITH per_tier AS (
+            SELECT collected_at, tier, gpu_model, price_usd_per_hr FROM gpu_pricing_marketplace
             UNION ALL
-            SELECT collected_at, tier, price_usd_per_hr FROM gpu_pricing_neocloud_lambda
+            SELECT collected_at, tier, gpu_model, price_usd_per_hr FROM gpu_pricing_neocloud_lambda
+        ),
+        common_models AS (
+            SELECT CAST(collected_at AS DATE) AS date, gpu_model
+            FROM per_tier
+            GROUP BY 1, 2
+            HAVING COUNT(DISTINCT tier) = 2
         )
+        SELECT
+            CAST(t.collected_at AS DATE) AS date,
+            t.tier,
+            COUNT(*) AS num_listings,
+            ROUND(MEDIAN(t.price_usd_per_hr), 4) AS median_price_usd_per_hr
+        FROM per_tier t
+        JOIN common_models c
+          ON CAST(t.collected_at AS DATE) = c.date AND t.gpu_model = c.gpu_model
         GROUP BY 1, 2
         ORDER BY 1, 2
     """)
