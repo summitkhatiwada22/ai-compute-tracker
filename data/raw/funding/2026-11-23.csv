@@ -1,0 +1,14 @@
+collected_at,source,market_map_id,market_map_title,selected_for_tags,dealroom_tags,total_companies,sample_funding_usd,sample_size,is_capped,segment_count,access_path,source_label
+2026-11-23T22:00:55.837168+00:00,dealroom,landscape-56130,1k+ Global Genetics & Genomics startups,Biotech,Biotech;Global;Health,1234,3271880736,96,True,8,companiesUrl,dealroom
+2026-11-23T22:00:55.837168+00:00,dealroom,landscape-54168,600+ Global Grid technology & infrastructure startups,Energy,Energy;Global,677,12086517352,205,True,18,companiesUrl,dealroom
+2026-11-23T22:00:55.837168+00:00,dealroom,landscape-12883,Alternative protein,Food & Agri,Food & Agri;Global,922,6717008757,90,True,8,companiesUrl,dealroom
+2026-11-23T22:00:55.837168+00:00,dealroom,landscape-30136,Autonomous Driving startups,Mobility,AI;Global;Mobility,417,47065734346,174,True,15,companiesUrl,dealroom
+2026-11-23T22:00:55.837168+00:00,dealroom,landscape-26778,Bitcoin DeFi and NFTs,Crypto,Crypto;Global,43,306375002,26,True,8,companiesUrl,dealroom
+2026-11-23T22:00:55.837168+00:00,dealroom,landscape-33371,Building energy efficiency startups,Real Estate,Climate;Global;Real Estate,414,5956211195,113,True,11,companiesUrl,dealroom
+2026-11-23T22:00:55.837168+00:00,dealroom,landscape-50938,"Defence, Security and Resilience startups in Europe",Defence,Defence;Europe,350,5990712804,72,True,6,companiesUrl,dealroom
+2026-11-23T22:00:55.837168+00:00,dealroom,landscape-47823,NYC AI Map by Lux Capital,USA,AI;USA,219,92011389764,153,True,27,companiesUrl,dealroom
+2026-11-23T22:00:55.837168+00:00,dealroom,landscape-47614,Nature fintech,Fintech,Climate;Fintech;Global,435,2738574847,216,True,18,companiesUrl,dealroom
+2026-11-23T22:00:55.837168+00:00,dealroom,landscape-57962,Rare Disease Therapeutics & Technologies Landscape,Health,Global;Health,1239,1968758526,120,True,10,companiesUrl,dealroom
+2026-11-23T22:00:55.837168+00:00,dealroom,landscape-53329,Side-stream upcycling startups by sources,Climate,Climate;Food & Agri;Global,711,1567050066,84,True,7,companiesUrl,dealroom
+2026-11-23T22:00:55.837168+00:00,dealroom,landscape-48531,"Startups for the Paris olympic games (sports, event, media tech)",France,Consumer;France,17,34796593,12,True,1,companiesUrl,dealroom
+2026-11-23T22:00:55.837168+00:00,dealroom,landscape-54048,Top Swiss Deep Tech startups,Switzerland,Deep Tech;Switzerland,294,7184030983,120,True,10,companiesUrl,dealroom
